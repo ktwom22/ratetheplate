@@ -5,9 +5,12 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
+os.makedirs('/data', exist_ok=True)  # Ensures /data exists for Railway persistence
+DATABASE_URL = os.environ.get("DATABASE_URL", "/data/restaurant.db")
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "your_default_secret")
-DATABASE_URL = os.environ.get("DATABASE_URL", "restaurant.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "/data/restaurant.db")
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -57,6 +60,9 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
+
+# Always create tables on startup, even with Gunicorn
+init_db()
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -218,5 +224,4 @@ def seed_rochester():
     return "Rochester NH dummy data loaded! <a href='/'>Back to feed</a>"
 
 if __name__ == '__main__':
-    init_db()
     app.run(debug=True)
