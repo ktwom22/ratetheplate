@@ -1,7 +1,6 @@
 import os
 import sqlite3
 import random
-import base64
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -9,7 +8,7 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "your_default_secret")
 DATABASE_URL = os.environ.get("DATABASE_URL", "/data/restaurant.db")
-os.makedirs('/data', exist_ok=True)  # Ensure Railway persistence directory exists
+os.makedirs('/data', exist_ok=True)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -45,7 +44,6 @@ def init_db():
             state TEXT,
             rating INTEGER NOT NULL,
             comment TEXT,
-            hashtags TEXT,
             photo TEXT,
             latitude REAL,
             longitude REAL
@@ -61,7 +59,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Always create tables on startup, even with Gunicorn on Railway
 init_db()
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -157,28 +154,16 @@ def post():
         comment = request.form['comment']
         lat = request.form.get('latitude')
         lng = request.form.get('longitude')
-        hashtags = request.form.get('hashtags')
-        edited_photo_data = request.form.get('edited_photo')
+        photo = request.files.get('photo')
         photo_filename = None
-        if edited_photo_data:
-            try:
-                header, encoded = edited_photo_data.split(',', 1)
-                ext = header.split('/')[1].split(';')[0]  # e.g. png or jpeg
-                photo_filename = f"edited_{random.randint(1000,9999)}.{ext}"
-                with open(os.path.join(app.config['UPLOAD_FOLDER'], photo_filename), "wb") as f:
-                    f.write(base64.b64decode(encoded))
-            except Exception as e:
-                flash(f"Photo upload failed: {e}", "danger")
-        else:
-            photo = request.files.get('photo')
-            if photo and photo.filename:
-                photo_filename = secure_filename(photo.filename)
-                photo.save(os.path.join(app.config['UPLOAD_FOLDER'], photo_filename))
+        if photo and photo.filename:
+            photo_filename = secure_filename(photo.filename)
+            photo.save(os.path.join(app.config['UPLOAD_FOLDER'], photo_filename))
         conn = get_db_connection()
         conn.execute('''
-            INSERT INTO plates (restaurant, plate, category, address, zipcode, city, state, rating, comment, hashtags, photo, latitude, longitude)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (restaurant, plate, category, address, zipcode, city, state, rating, comment, hashtags, photo_filename, lat, lng))
+            INSERT INTO plates (restaurant, plate, category, address, zipcode, city, state, rating, comment, photo, latitude, longitude)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (restaurant, plate, category, address, zipcode, city, state, rating, comment, photo_filename, lat, lng))
         conn.commit()
         conn.close()
         return redirect(url_for('index'))
@@ -197,9 +182,8 @@ def search():
            OR zipcode LIKE ?
            OR city LIKE ?
            OR state LIKE ?
-           OR hashtags LIKE ?
            ORDER BY id DESC""",
-        (f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%')
+        (f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%')
     ).fetchall()
     conn.close()
     return render_template('index.html', plates=plates, search=query)
@@ -218,25 +202,24 @@ def spin():
 @app.route('/seed_rochester')
 def seed_rochester():
     dummy_plates = [
-        ("Lilac City Grill", "New England Clam Chowder", "Soup", "103 N Main St, Rochester, NH, USA", "03867", "Rochester", "NH", 5, "Creamy and full of clams.", "#seafood #soup", "clamchowder.jpg", 43.3045, -70.9786),
-        ("Spaulding Steak & Ale", "Prime Rib", "Meat", "500 Spaulding Turnpike, Rochester, NH, USA", "03867", "Rochester", "NH", 4, "Tender, juicy prime rib.", "#meat #steak", "primerib.jpg", 43.3040, -70.9872),
-        ("China Palace", "General Tso's Chicken", "Fried Food", "21 S Main St, Rochester, NH, USA", "03867", "Rochester", "NH", 4, "Crispy and tangy.", "#chinese #spicy", "generaltso.jpg", 43.3018, -70.9727),
-        ("Revolution Taproom & Grill", "Fish Tacos", "Taco", "61 N Main St, Rochester, NH, USA", "03867", "Rochester", "NH", 5, "Fresh and zesty tacos.", "#taco #fish", "fishtacos.jpg", 43.3057, -70.9782),
-        ("Dos Amigos Burritos", "Vegetarian Burrito", "Vegetarian", "55 N Main St, Rochester, NH, USA", "03867", "Rochester", "NH", 5, "Loaded with veggies!", "#vegetarian #burrito", "vegburrito.jpg", 43.3052, -70.9783),
-        ("Granite Steak & Grill", "Cheesecake", "Dessert", "11 Farmington Rd, Rochester, NH, USA", "03867", "Rochester", "NH", 5, "Rich and creamy.", "#dessert #cake", "cheesecake.jpg", 43.2971, -70.9765),
-        ("La Corona Mexican Restaurant", "Chicken Enchiladas", "Wrap", "83 S Main St, Rochester, NH, USA", "03867", "Rochester", "NH", 4, "Spicy and satisfying.", "#mexican #spicy", "enchiladas.jpg", 43.2993, -70.9726),
+        ("Lilac City Grill", "New England Clam Chowder", "Soup", "103 N Main St, Rochester, NH, USA", "03867", "Rochester", "NH", 5, "Creamy and full of clams.", "clamchowder.jpg", 43.3045, -70.9786),
+        ("Spaulding Steak & Ale", "Prime Rib", "Meat", "500 Spaulding Turnpike, Rochester, NH, USA", "03867", "Rochester", "NH", 4, "Tender, juicy prime rib.", "primerib.jpg", 43.3040, -70.9872),
+        ("China Palace", "General Tso's Chicken", "Fried Food", "21 S Main St, Rochester, NH, USA", "03867", "Rochester", "NH", 4, "Crispy and tangy.", "generaltso.jpg", 43.3018, -70.9727),
+        ("Revolution Taproom & Grill", "Fish Tacos", "Taco", "61 N Main St, Rochester, NH, USA", "03867", "Rochester", "NH", 5, "Fresh and zesty tacos.", "fishtacos.jpg", 43.3057, -70.9782),
+        ("Dos Amigos Burritos", "Vegetarian Burrito", "Vegetarian", "55 N Main St, Rochester, NH, USA", "03867", "Rochester", "NH", 5, "Loaded with veggies!", "vegburrito.jpg", 43.3052, -70.9783),
+        ("Granite Steak & Grill", "Cheesecake", "Dessert", "11 Farmington Rd, Rochester, NH, USA", "03867", "Rochester", "NH", 5, "Rich and creamy.", "cheesecake.jpg", 43.2971, -70.9765),
+        ("La Corona Mexican Restaurant", "Chicken Enchiladas", "Wrap", "83 S Main St, Rochester, NH, USA", "03867", "Rochester", "NH", 4, "Spicy and satisfying.", "enchiladas.jpg", 43.2993, -70.9726),
     ]
     conn = get_db_connection()
     for plate in dummy_plates:
         conn.execute('''
-            INSERT INTO plates (restaurant, plate, category, address, zipcode, city, state, rating, comment, hashtags, photo, latitude, longitude)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO plates (restaurant, plate, category, address, zipcode, city, state, rating, comment, photo, latitude, longitude)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', plate)
     conn.commit()
     conn.close()
     return "Rochester NH dummy data loaded! <a href='/'>Back to feed</a>"
 
-# Allow embedding in iframe
 @app.after_request
 def add_header(response):
     response.headers['X-Frame-Options'] = 'ALLOWALL'
