@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8 mx-auto text-center">
+    <h3 class="mb-4">Spin for Restaurant in Zip Code: <span class="text-primary">{{ zipcode }}</span></h3>
+    <div id="spinner-container" style="margin: 40px 0;">
+      <div class="spinner-border text-success" role="status" style="width: 5rem; height: 5rem;">
+        <span class="visually-hidden">Spinning...</span>
+      </div>
+      <div class="mt-3 fw-bold fs-4">Spinning...</div>
+    </div>
+    <div id="result-container" style="display:none;">
+      {% if plate %}
+        <div class="card shadow-sm">
+          {% if plate['photo'] %}
+            <img src="{{ url_for('static', filename='uploads/' ~ plate['photo']) }}" class="card-img-top" alt="Plate photo">
+          {% endif %}
+          <div class="card-body">
+            <h5 class="card-title">{{ plate['restaurant'] }}</h5>
+            <h6 class="card-subtitle mb-2 text-muted">{{ plate['plate'] }}</h6>
+            <p><span class="fw-bold">Category:</span> {{ plate['category'] }}</p>
+            <p><span class="fw-bold">Address:</span> {{ plate['address'] }}</p>
+            <p><span class="fw-bold">City:</span> {{ plate['city'] }}, <span class="fw-bold">State:</span> {{ plate['state'] }}, <span class="fw-bold">Zip:</span> {{ plate['zipcode'] }}</p>
+            <div>
+              {% for i in range(1,6) %}
+                {% if i <= plate['rating']|int %}
+                  <span class="star text-warning">&#9733;</span>
+                {% else %}
+                  <span class="star text-secondary">&#9733;</span>
+                {% endif %}
+              {% endfor %}
+              <span class="ms-2 text-muted">[{{ plate['rating'] }} / 5]</span>
+            </div>
+            <p class="card-text mt-2">{{ plate['comment'] }}</p>
+            {% if plate['latitude'] and plate['longitude'] %}
+              <p><span class="fw-bold">Location:</span>
+                <a href="https://www.google.com/maps/search/?api=1&query={{ plate['latitude'] }},{{ plate['longitude'] }}" target="_blank">
+                  ({{ plate['latitude'] }}, {{ plate['longitude'] }})
+                </a>
+              </p>
+            {% endif %}
+          </div>
+        </div>
+        <a href="/" class="btn btn-primary mt-4">Back to Feed</a>
+      {% else %}
+        <div class="alert alert-warning mt-4">No restaurants found for zip code <b>{{ zipcode }}</b>. Try another zip!</div>
+        <a href="/" class="btn btn-primary mt-2">Back to Feed</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<script>
+  window.onload = function() {
+    setTimeout(function() {
+      document.getElementById('spinner-container').style.display = 'none';
+      document.getElementById('result-container').style.display = 'block';
+    }, 2000);
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<h3 class="mb-4">My Next Meal (Favorites)</h3>
+<div class="row">
+  {% for plate in favorites %}
+    <div class="col-md-6 col-lg-4 mb-4">
+      <div class="card shadow-sm h-100">
+        {% if plate['photo'] %}
+          <img src="{{ url_for('static', filename='uploads/' ~ plate['photo']) }}" class="card-img-top" alt="Plate photo">
+        {% endif %}
+        <div class="card-body">
+          <h5 class="card-title">{{ plate['restaurant'] }}</h5>
+          <h6 class="card-subtitle mb-2 text-muted">{{ plate['plate'] }}</h6>
+          <p class="mb-1"><span class="fw-bold">Category:</span> {{ plate['category'] }}</p>
+          <p class="mb-1"><span class="fw-bold">Address:</span> {{ plate['address'] }}</p>
+          <p class="mb-1">
+            <span class="fw-bold">City:</span> {{ plate['city'] }},
+            <span class="fw-bold">State:</span> {{ plate['state'] }},
+            <span class="fw-bold">Zip:</span> {{ plate['zipcode'] }}
+          </p>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="col-12"><div class="alert alert-info">No favorites yet!</div></div>
+  {% endfor %}
+</div>
+{% endblock %}

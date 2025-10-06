@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+  <div class="col-md-8 col-lg-6 mx-auto">
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white">Post a Food Plate</div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label">Restaurant</label>
+            <input name="restaurant" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Plate Name</label>
+            <input name="plate" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Category</label>
+            <select name="category" id="category" class="form-select" required>
+              <option value="">Select Category</option>
+              {% for cat in categories %}
+                <option value="{{ cat }}">{{ cat }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Address</label>
+            <input name="address" id="address" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Zip Code</label>
+            <input name="zipcode" id="zipcode" class="form-control">
+          </div>
+          <input type="hidden" name="city" id="city">
+          <input type="hidden" name="state" id="state">
+          <div class="mb-3">
+            <label class="form-label">Rating</label>
+            <div id="star-rating" class="mb-2">
+              {% for i in range(1,6) %}
+                <span class="star text-secondary" data-value="{{ i }}" style="cursor:pointer;">&#9733;</span>
+              {% endfor %}
+            </div>
+            <input type="hidden" name="rating" id="rating" value="0" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Comment</label>
+            <textarea name="comment" class="form-control" rows="3"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Photo</label>
+            <input type="file" name="photo" class="form-control" accept="image/*">
+          </div>
+          <input type="hidden" name="latitude" id="latitude">
+          <input type="hidden" name="longitude" id="longitude">
+          <button type="submit" class="btn btn-primary w-100">Post</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<a href="/" class="btn btn-link mt-3">Back to feed</a>
+<script>
+// Star rating logic
+const stars = document.querySelectorAll('.star');
+const ratingInput = document.getElementById('rating');
+stars.forEach((star, i) => {
+  star.addEventListener('mouseenter', () => {
+    stars.forEach((s, j) => {
+      s.classList[j <= i ? 'add' : 'remove']('text-warning');
+      s.classList[j > i ? 'add' : 'remove']('text-secondary');
+    });
+  });
+  star.addEventListener('mouseleave', () => {
+    const val = parseInt(ratingInput.value) || 0;
+    stars.forEach((s, j) => {
+      s.classList[j < val ? 'add' : 'remove']('text-warning');
+      s.classList[j >= val ? 'add' : 'remove']('text-secondary');
+    });
+  });
+  star.addEventListener('click', () => {
+    ratingInput.value = i+1;
+    stars.forEach((s, j) => {
+      s.classList[j <= i ? 'add' : 'remove']('text-warning');
+      s.classList[j > i ? 'add' : 'remove']('text-secondary');
+    });
+  });
+});
+
+// Geolocation + Address suggestion
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    document.getElementById('latitude').value = pos.coords.latitude;
+    document.getElementById('longitude').value = pos.coords.longitude;
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.address) {
+          const street = data.address.road || '';
+          const city = data.address.city || data.address.town || data.address.village || '';
+          const state = data.address.state || '';
+          const zip = data.address.postcode || '';
+          const country = data.address.country || '';
+          const addressSuggestion = [street, city, state, country].filter(Boolean).join(', ');
+          document.getElementById('address').value = addressSuggestion;
+          document.getElementById('zipcode').value = zip;
+          document.getElementById('city').value = city;
+          document.getElementById('state').value = state;
+        }
+      });
+  });
+}
+</script>
+{% endblock %}
