@@ -116,8 +116,10 @@ def account():
         WHERE favorites.user_id = ?
         ORDER BY plates.id DESC
     ''', (session['user_id'],)).fetchall()
+    # Show all plates for browsing/saving
+    plates = conn.execute('SELECT * FROM plates ORDER BY id DESC').fetchall()
     conn.close()
-    return render_template('account.html', favorites=favorites)
+    return render_template('account.html', favorites=favorites, plates=plates)
 
 @app.route('/favorite/<int:plate_id>', methods=['POST'])
 def favorite(plate_id):
@@ -131,7 +133,7 @@ def favorite(plate_id):
     conn.commit()
     conn.close()
     flash('Added to My Next Meal!', 'success')
-    return redirect(url_for('index'))
+    return redirect(url_for('account'))
 
 @app.route('/')
 def index():

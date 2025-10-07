@@ -1,28 +1,49 @@
 {% extends "base.html" %}
 {% block content %}
-<h3 class="mb-4">My Next Meal (Favorites)</h3>
+<h2>My Next Plate</h2>
+
+<!-- Show user's favorite plates -->
+{% if favorites %}
+  <div class="row">
+    {% for plate in favorites %}
+      <div class="col-md-4">
+        <div class="card mb-3">
+          {% if plate.photo %}
+            <img src="{{ url_for('static', filename='uploads/' ~ plate.photo) }}" class="card-img-top" alt="Photo">
+          {% endif %}
+          <div class="card-body">
+            <h5 class="card-title">{{ plate.plate }}</h5>
+            <p class="card-text"><strong>Restaurant:</strong> {{ plate.restaurant }}</p>
+            <p class="card-text">{{ plate.comment }}</p>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p>You have no plates saved! Browse below and save some.</p>
+{% endif %}
+
+<hr>
+
+<h3>Browse Plates and Save to My Next Plate</h3>
 <div class="row">
-  {% for plate in favorites %}
-    <div class="col-md-6 col-lg-4 mb-4">
-      <div class="card shadow-sm h-100">
-        {% if plate['photo'] %}
-          <img src="{{ url_for('static', filename='uploads/' ~ plate['photo']) }}" class="card-img-top" alt="Plate photo">
+  {% for plate in plates %}
+    <div class="col-md-4">
+      <div class="card mb-3">
+        {% if plate.photo %}
+          <img src="{{ url_for('static', filename='uploads/' ~ plate.photo) }}" class="card-img-top" alt="Photo">
         {% endif %}
         <div class="card-body">
-          <h5 class="card-title">{{ plate['restaurant'] }}</h5>
-          <h6 class="card-subtitle mb-2 text-muted">{{ plate['plate'] }}</h6>
-          <p class="mb-1"><span class="fw-bold">Category:</span> {{ plate['category'] }}</p>
-          <p class="mb-1"><span class="fw-bold">Address:</span> {{ plate['address'] }}</p>
-          <p class="mb-1">
-            <span class="fw-bold">City:</span> {{ plate['city'] }},
-            <span class="fw-bold">State:</span> {{ plate['state'] }},
-            <span class="fw-bold">Zip:</span> {{ plate['zipcode'] }}
-          </p>
+          <h5 class="card-title">{{ plate.plate }}</h5>
+          <p class="card-text"><strong>Restaurant:</strong> {{ plate.restaurant }}</p>
+          <p class="card-text">{{ plate.comment }}</p>
+          <form method="post" action="{{ url_for('favorite', plate_id=plate.id) }}">
+            <button type="submit" class="btn btn-success">Save to My Next Plate</button>
+          </form>
         </div>
       </div>
     </div>
-  {% else %}
-    <div class="col-12"><div class="alert alert-info">No favorites yet!</div></div>
   {% endfor %}
 </div>
 {% endblock %}
