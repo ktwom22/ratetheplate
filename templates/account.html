@@ -2,7 +2,22 @@
 {% block content %}
 <h2>My Next Plate</h2>
 
-<!-- Show user's favorite plates -->
+<h3>Email Reminder Preferences</h3>
+<form method="post" action="{{ url_for('account') }}">
+  <div class="mb-3">
+    <label for="reminder_freq" class="form-label">Reminder Frequency</label>
+    <select name="reminder_freq" id="reminder_freq" class="form-select">
+      <option value="none" {% if reminder_freq == "none" %}selected{% endif %}>No Emails</option>
+      <option value="45min" {% if reminder_freq == "45min" %}selected{% endif %}>45 Minutes</option>
+      <option value="1day" {% if reminder_freq == "1day" %}selected{% endif %}>1 Day</option>
+      <option value="1week" {% if reminder_freq == "1week" %}selected{% endif %}>1 Week</option>
+    </select>
+  </div>
+  <button class="btn btn-primary" type="submit">Save Preference</button>
+</form>
+<hr>
+
+<!-- User's favorite plates -->
 {% if favorites %}
   <div class="row">
     {% for plate in favorites %}
