@@ -1,8 +1,7 @@
 import os
 import sqlite3
-import random
-import math
 import datetime
+import math
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -28,55 +27,56 @@ def get_db_connection():
 def migrate_db():
     conn = get_db_connection()
     c = conn.cursor()
-    # Ensure reminder_freq column exists in users
     try:
         c.execute("ALTER TABLE users ADD COLUMN reminder_freq TEXT DEFAULT '1day';")
     except sqlite3.OperationalError:
         pass
-    # Ensure user_id column exists in plates
     try:
         c.execute("ALTER TABLE plates ADD COLUMN user_id INTEGER;")
     except sqlite3.OperationalError:
         pass
-    # Ensure created_at column exists in plates
-    try:
-        c.execute("ALTER TABLE plates ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
-    except sqlite3.OperationalError:
-        pass
-    # Ensure rating column can be NULL (migrate if NOT NULL)
-    # Check if plates.rating is defined as NOT NULL and migrate if so
     c.execute("PRAGMA table_info(plates);")
-    cols = c.fetchall()
-    for col in cols:
-        if col[1] == "rating" and col[3] == 1:  # NOT NULL
-            # Migrate table to allow rating to be NULL
-            c.executescript('''
-                CREATE TABLE IF NOT EXISTS plates_new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER,
-                    restaurant TEXT NOT NULL,
-                    plate TEXT NOT NULL,
-                    category TEXT,
-                    address TEXT NOT NULL,
-                    zipcode TEXT,
-                    city TEXT,
-                    state TEXT,
-                    rating INTEGER,
-                    comment TEXT,
-                    photo TEXT,
-                    latitude REAL,
-                    longitude REAL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                INSERT INTO plates_new
-                    (id, user_id, restaurant, plate, category, address, zipcode, city, state, rating, comment, photo, latitude, longitude, created_at)
-                SELECT
-                    id, user_id, restaurant, plate, category, address, zipcode, city, state, rating, comment, photo, latitude, longitude, created_at
-                FROM plates;
-                DROP TABLE plates;
-                ALTER TABLE plates_new RENAME TO plates;
-            ''')
-            break
+    columns = [col[1] for col in c.fetchall()]
+    has_created_at = "created_at" in columns
+    if not has_created_at:
+        c.execute("ALTER TABLE plates ADD COLUMN created_at TIMESTAMP;")
+        now = datetime.datetime.utcnow().isoformat(sep=' ')
+        c.execute("UPDATE plates SET created_at = ?", (now,))
+        conn.commit()
+    c.execute("PRAGMA table_info(plates);")
+    colnames = [col[1] for col in c.fetchall()]
+    all_cols = [
+        "id", "user_id", "restaurant", "plate", "category", "address", "zipcode", "city", "state",
+        "rating", "comment", "photo", "latitude", "longitude", "created_at"
+    ]
+    select_clause = ", ".join([col for col in all_cols if col in colnames])
+    insert_clause = select_clause
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS plates_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            restaurant TEXT NOT NULL,
+            plate TEXT NOT NULL,
+            category TEXT,
+            address TEXT NOT NULL,
+            zipcode TEXT,
+            city TEXT,
+            state TEXT,
+            rating INTEGER,
+            comment TEXT,
+            photo TEXT,
+            latitude REAL,
+            longitude REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute(f'''
+        INSERT INTO plates_new ({insert_clause})
+        SELECT {select_clause} FROM plates
+    ''')
+    conn.commit()
+    c.execute('DROP TABLE plates')
+    c.execute('ALTER TABLE plates_new RENAME TO plates')
     conn.commit()
     conn.close()
 
@@ -209,7 +209,7 @@ def index():
     conn = get_db_connection()
     plates = conn.execute('SELECT * FROM plates ORDER BY id DESC').fetchall()
     conn.close()
-    return render_template('index.html', plates=plates)
+    return render_template('index.html', plates=plates, search="", zip="", request=request)
 
 def haversine(lat1, lon1, lat2, lon2):
     R = 3958.8  # Earth radius in miles
@@ -219,44 +219,73 @@ def haversine(lat1, lon1, lat2, lon2):
     a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
-@app.route('/search')
+@app.route('/search', methods=['GET'])
 def search():
-    query = request.args.get('q', '')
-    radius = request.args.get('radius', '')
+    query = request.args.get('q', '').strip()
+    zip_code = request.args.get('zip', '').strip()
+    radius = request.args.get('radius', '').strip()
     user_lat = request.args.get('lat')
     user_lng = request.args.get('lng')
     plates = []
 
+    def matches_search(plate):
+        q = query.lower()
+        return (
+            q in (plate['restaurant'] or '').lower() or
+            q in (plate['plate'] or '').lower() or
+            q in (plate['category'] or '').lower()
+        )
+
     if radius and user_lat and user_lng:
-        lat1, lon1 = float(user_lat), float(user_lng)
+        try:
+            lat1, lon1 = float(user_lat), float(user_lng)
+            rad = float(radius)
+        except (TypeError, ValueError):
+            lat1 = lon1 = rad = None
+        if lat1 is not None and lon1 is not None and rad is not None:
+            conn = get_db_connection()
+            all_plates = conn.execute("SELECT * FROM plates WHERE latitude IS NOT NULL AND longitude IS NOT NULL").fetchall()
+            filtered_plates = []
+            for plate in all_plates:
+                try:
+                    lat2 = float(plate['latitude'])
+                    lon2 = float(plate['longitude'])
+                    dist = haversine(lat1, lon1, lat2, lon2)
+                    if dist <= rad:
+                        # If zip is provided, both search and zip must match
+                        if zip_code:
+                            if matches_search(plate) and zip_code == (plate['zipcode'] or ''):
+                                plate = dict(plate)
+                                plate['distance'] = round(dist, 2)
+                                filtered_plates.append(plate)
+                        else:
+                            # No zip: only match search
+                            if matches_search(plate):
+                                plate = dict(plate)
+                                plate['distance'] = round(dist, 2)
+                                filtered_plates.append(plate)
+                except (TypeError, ValueError):
+                    continue
+            plates = sorted(filtered_plates, key=lambda p: p['distance'])
+            conn.close()
+    elif query:
         conn = get_db_connection()
-        all_plates = conn.execute("SELECT * FROM plates WHERE latitude IS NOT NULL AND longitude IS NOT NULL").fetchall()
+        all_plates = conn.execute('SELECT * FROM plates').fetchall()
         plates = []
         for plate in all_plates:
-            try:
-                lat2, lon2 = float(plate['latitude']), float(plate['longitude'])
-                dist = haversine(lat1, lon1, lat2, lon2)
-                if dist < float(radius):
+            # If zip is provided, both search and zip must match
+            if zip_code:
+                if matches_search(plate) and zip_code == (plate['zipcode'] or ''):
                     plates.append(plate)
-            except (TypeError, ValueError):
-                continue
+            else:
+                if matches_search(plate):
+                    plates.append(plate)
         conn.close()
     else:
         conn = get_db_connection()
-        plates = conn.execute(
-            """SELECT * FROM plates
-               WHERE restaurant LIKE ?
-               OR plate LIKE ?
-               OR category LIKE ?
-               OR address LIKE ?
-               OR zipcode LIKE ?
-               OR city LIKE ?
-               OR state LIKE ?
-               ORDER BY id DESC""",
-            (f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%')
-        ).fetchall()
+        plates = conn.execute('SELECT * FROM plates ORDER BY id DESC').fetchall()
         conn.close()
-    return render_template('index.html', plates=plates, search=query)
+    return render_template('index.html', plates=plates, search=query, zip=zip_code, request=request)
 
 @app.route('/post', methods=('GET', 'POST'))
 def post():
@@ -316,9 +345,7 @@ def rate_plate(plate_id):
     conn.close()
     return render_template('rate_plate.html', plate=plate)
 
-# (Demo) Email reminder job - call from cron or scheduler
 def send_reminder(to_email, username, plate_id, plate_name):
-    # Replace this with real email sending in production!
     print(f"Send reminder to {to_email}: Hi {username}, please rate your plate '{plate_name}' at http://yourdomain.com/rate/{plate_id}")
 
 def run_reminder_job():
@@ -334,10 +361,12 @@ def run_reminder_job():
         freq = plate['reminder_freq'] if plate and 'reminder_freq' in plate.keys() and plate['reminder_freq'] else '1day'
         if not plate['email'] or freq == 'none':
             continue
-        created = datetime.datetime.fromisoformat(plate['created_at'])
-        send = False
+        created = plate['created_at']
+        if isinstance(created, str):
+            created = datetime.datetime.fromisoformat(created)
         elapsed_minutes = (now - created).total_seconds() / 60
         elapsed_days = (now - created).days
+        send = False
         if freq == '45min' and 44 < elapsed_minutes < 46:
             send = True
         elif freq == '1day' and elapsed_days == 1:

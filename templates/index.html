@@ -1,6 +1,85 @@
 {% extends "base.html" %}
 {% block content %}
-<h2 class="mb-4">Latest Plates</h2>
+<div id="geoStatus" class="mb-2"></div>
+<form class="row g-3 mb-4" method="get" action="{{ url_for('search') }}">
+  <div class="col-md-4">
+    <input type="text" class="form-control" name="q" placeholder="Search by restaurant, plate, or category" value="{{ request.args.get('q','') }}">
+  </div>
+  <div class="col-md-2">
+    <input type="text" class="form-control" name="zip" placeholder="Zip code" value="{{ request.args.get('zip','') }}">
+  </div>
+  <div class="col-md-3">
+    <div class="input-group">
+      <select class="form-select" name="radius" id="radiusInput">
+        <option value="">Radius (miles)</option>
+        {% for r in [1, 5, 10, 15, 20, 25, 30] %}
+          <option value="{{ r }}" {% if request.args.get('radius','') == r|string %}selected{% endif %}>{{ r }}</option>
+        {% endfor %}
+      </select>
+      <button type="button" class="btn btn-outline-secondary" id="geoBtn" title="Use my location">📍</button>
+    </div>
+    <input type="hidden" id="latInput" name="lat" value="{{ request.args.get('lat','') }}">
+    <input type="hidden" id="lngInput" name="lng" value="{{ request.args.get('lng','') }}">
+  </div>
+  <div class="col-md-2">
+    <button type="submit" class="btn btn-primary w-100">Search</button>
+  </div>
+</form>
+
+<script>
+document.getElementById('geoBtn').onclick = function(event) {
+    event.preventDefault();
+    var geoStatus = document.getElementById('geoStatus');
+    geoStatus.textContent = "Locating...";
+    geoStatus.className = "mb-2 text-info";
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+            var lat = position.coords.latitude;
+            var lng = position.coords.longitude;
+            document.getElementById('latInput').value = lat;
+            document.getElementById('lngInput').value = lng;
+            document.getElementById('radiusInput').focus();
+            geoStatus.textContent = "Location found! Getting zip code...";
+            geoStatus.className = "mb-2 text-success";
+            // Reverse geocode to get ZIP code
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+                .then(response => response.json())
+                .then(data => {
+                    if(data.address && data.address.postcode) {
+                        document.querySelector('input[name="zip"]').value = data.address.postcode;
+                        geoStatus.textContent = "Location and zip filled!";
+                        geoStatus.className = "mb-2 text-success";
+                    } else {
+                        geoStatus.textContent = "Location found, but zip not found.";
+                        geoStatus.className = "mb-2 text-warning";
+                    }
+                })
+                .catch(() => {
+                    geoStatus.textContent = "Location found, but zip could not be determined.";
+                    geoStatus.className = "mb-2 text-warning";
+                });
+        }, function(error) {
+            geoStatus.textContent = "Unable to retrieve your location.";
+            geoStatus.className = "mb-2 text-danger";
+        });
+    } else {
+        geoStatus.textContent = "Geolocation is not supported by your browser.";
+        geoStatus.className = "mb-2 text-danger";
+    }
+};
+</script>
+
+{% if search or zip %}
+  <div class="alert alert-info">
+    Showing results
+    {% if search %}for "<strong>{{ search }}</strong>"{% endif %}
+    {% if zip %}in zip <strong>{{ zip }}</strong>{% endif %}
+    {% if request.args.get('radius') and request.args.get('lat') and request.args.get('lng') %}
+      within {{ request.args.get('radius') }} miles of your location
+    {% endif %}
+  </div>
+{% endif %}
+
 <div class="row g-4">
   {% for plate in plates %}
     <div class="col-md-4 col-lg-3">
@@ -20,6 +99,9 @@
                 {% for i in range(5-plate.rating) %}&#9734;{% endfor %}
               </span>
             </div>
+          {% endif %}
+          {% if plate.distance is defined %}
+            <span class="badge bg-info text-dark">~{{ plate.distance }} mi</span>
           {% endif %}
           {% if session.get('user_id') %}
             <form method="post" action="{{ url_for('favorite', plate_id=plate.id) }}">
